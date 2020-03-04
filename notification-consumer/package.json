@@ -1,0 +1,17 @@
+{
+  "name": "notification-consumer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "consumers.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^3.2.0",
+    "dotenv": "^8.2.0",
+    "kafka-node": "^5.0.0",
+    "redis": "^3.0.2"
+  }
+}
