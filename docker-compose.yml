@@ -8,7 +8,7 @@ services:
       NODE_ENV: development
       MAX_SMS_COUNT_PER_SECOND: 10
       KAFKA_HOST: 'kafka:9092'
-      REDIS_URL: 'redis://redisdb::6379'
+      REDIS_URL: 'redis://redisdb:6379'
       PORT: 80
     ports:
       - '8000:80'
