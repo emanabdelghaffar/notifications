@@ -7,8 +7,11 @@ services:
     environment:
       NODE_ENV: development
       MAX_SMS_COUNT_PER_SECOND: 10
-      KAFKA_HOST: 'kafka'
-      REDIS_URL: 'redis://cache'
+      KAFKA_HOST: 'kafka:9092'
+      REDIS_URL: 'redis://redisdb::6379'
+      PORT: 80
+    ports:
+      - '8000:80'
     depends_on:
       - kafka
       - redisdb
@@ -17,15 +20,17 @@ services:
 
   notificationsproducer:
     image: notificationsproducer
-    build: ./notification-consumer
+    build: ./notification-publisher
     environment:
       NODE_ENV: development
-      KAFKA_HOST: 'kafka'
+      KAFKA_HOST: 'kafka:9092'
+      PORT: 80
     ports:
-      - 80:80
+      - '8080:80'
     depends_on:
       - kafka
       - redisdb
+      - zookeeper
     networks:
       - app-network
 
@@ -40,7 +45,7 @@ services:
     ports:
       - '9092:9092'
     environment:
-      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
+      KAFKA_ADVERTISED_HOST_NAME: kafka
       LOG4J_LOGGER_KAFKA_AUTHORIZER_LOGGER: DEBUG
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     volumes:

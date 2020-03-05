@@ -4,5 +4,4 @@ module.exports = {
 	REDIS_URL: process.env.REDIS_URL,
 	SMS_NOTIFICATION_TOPIC: 'sms',
 	PUSH_NOTIFICATION_TOPIC: 'pushnotifications',
-	PORT: 80,
 };

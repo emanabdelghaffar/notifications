@@ -1,8 +1,8 @@
 const { promisify } = require('util');
 const redis = require('redis');
-const { MAX_SMS_COUNT_PER_MINT } = require('../configurations');
+const { MAX_SMS_COUNT_PER_MINT, REDIS_URL } = require('../configurations');
 
-const client = redis.createClient();
+const client = redis.createClient(REDIS_URL);
 
 client.on('error', function(error) {
 	console.error('redis error', error);
