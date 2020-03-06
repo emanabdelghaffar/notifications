@@ -8,8 +8,6 @@ const { isLimitPerMinuteExceeded } = require('./services/redis');
 const { sendSMS } = require('./services/sms');
 const { sendPushNotification } = require('./services/push-notification');
 
-const { ConsumerGroup } = kafka;
-
 const consumerOptions = {
 	kafkaHost: KAFKA_HOST,
 	groupId: 'ExampleTestGroup',
@@ -20,16 +18,27 @@ const consumerOptions = {
 	fromOffset: 'earliest',
 };
 
-const smsConsumerGroup = new ConsumerGroup({ ...consumerOptions, id: uuidv4() }, [SMS_NOTIFICATION_TOPIC]);
+const smsConsumerGroup = new kafka.ConsumerGroup({ ...consumerOptions, id: uuidv4() }, [SMS_NOTIFICATION_TOPIC]);
 const commitSmsConsumerGroup = util.promisify(smsConsumerGroup.commit).bind(smsConsumerGroup);
 
-const RESUME_INTERVAL = 500;
+const RESUME_INTERVAL = 100;
 let isSmsConsumerGroupPaused = false;
-const resumePausedSmsConsumerGroup = () => {
-	if (isSmsConsumerGroupPaused) {
+let lastprocessedOffset = 0;
+let lastfetchedOffset = 0;
+
+const resumePausedSmsConsumerGroup = async () => {
+	if (!isSmsConsumerGroupPaused) {
+		return;
+	}
+	const isLimitReached = await isLimitPerMinuteExceeded(SMS_NOTIFICATION_TOPIC);
+	if (!isLimitReached) {
 		console.log('resuming');
 		smsConsumerGroup.resume();
 		isSmsConsumerGroupPaused = false;
+	}
+	if (lastprocessedOffset === lastfetchedOffset) {
+		console.log('lastprocessedOffset', lastprocessedOffset, 'lastfetchedOffset', lastfetchedOffset);
+		await commitSmsConsumerGroup();
 	}
 };
 
@@ -38,8 +47,9 @@ setInterval(resumePausedSmsConsumerGroup, RESUME_INTERVAL);
 const onError = console.log;
 const onSMSMessage = async function(message) {
 	try {
+		lastfetchedOffset = message.offset;
 		const data = JSON.parse(message.value);
-		const limitReached = await isLimitPerMinuteExceeded(message.topic);
+		const limitReached = await isLimitPerMinuteExceeded(message.topic, true);
 		console.log(message);
 		if (limitReached) {
 			console.log('limitReached to', limitReached);
@@ -51,7 +61,8 @@ const onSMSMessage = async function(message) {
 			return;
 		}
 		await sendSMS(data.phoneNumber, data.message);
-		await commitSmsConsumerGroup();
+		console.log('offset', message.offset, 'processed');
+		lastprocessedOffset = message.offset;
 	} catch (err) {
 		console.log(err);
 	}
@@ -59,7 +70,7 @@ const onSMSMessage = async function(message) {
 smsConsumerGroup.on('error', onError);
 smsConsumerGroup.on('message', onSMSMessage);
 
-const pushConsumerGroup = new ConsumerGroup({ ...consumerOptions, id: 'push1' }, [PUSH_NOTIFICATION_TOPIC]);
+const pushConsumerGroup = new kafka.ConsumerGroup({ ...consumerOptions, id: uuidv4() }, [PUSH_NOTIFICATION_TOPIC]);
 const commitPushConsumerGroup = util.promisify(pushConsumerGroup.commit).bind(pushConsumerGroup);
 
 const onPushMessage = async function(message) {
