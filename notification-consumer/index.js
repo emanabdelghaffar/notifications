@@ -4,7 +4,7 @@ const util = require('util');
 const uuidv4 = require('uuid').v4;
 
 const { KAFKA_HOST, SMS_NOTIFICATION_TOPIC, PUSH_NOTIFICATION_TOPIC } = require('./configurations');
-const { isLimitPerMinuteExceeded } = require('./services/redis');
+const { isLimitPerMinuteExceeded, shutdown } = require('./services/redis');
 const { sendSMS } = require('./services/sms');
 const { sendPushNotification } = require('./services/push-notification');
 
@@ -89,4 +89,5 @@ process.once('SIGINT', function() {
 	async.each([pushConsumerGroup, smsConsumerGroup], function(consumer, callback) {
 		consumer.close(true, callback);
 	});
+	shutdown();
 });
