@@ -29,7 +29,7 @@ describe('publishing notifications endpoint', () => {
 	});
 	it('should publish push notifications', done => {
 		const body = {
-			type: 'pushnotifications',
+			type: 'push-notification',
 			data: [...Array(100).keys()].map(i => ({
 				phoneNumber: `0100000${i}`,
 				message: `messagenumber${i}`,

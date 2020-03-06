@@ -1,6 +1,7 @@
 const async = require('async');
 const kafka = require('kafka-node');
 const util = require('util');
+const uuidv4 = require('uuid').v4;
 
 const { KAFKA_HOST, SMS_NOTIFICATION_TOPIC, PUSH_NOTIFICATION_TOPIC } = require('./configurations');
 const { isLimitPerMinuteExceeded } = require('./services/redis');
@@ -19,8 +20,20 @@ const consumerOptions = {
 	fromOffset: 'earliest',
 };
 
-const smsConsumerGroup = new ConsumerGroup({ ...consumerOptions, id: 'sms1' }, [SMS_NOTIFICATION_TOPIC]);
+const smsConsumerGroup = new ConsumerGroup({ ...consumerOptions, id: uuidv4() }, [SMS_NOTIFICATION_TOPIC]);
 const commitSmsConsumerGroup = util.promisify(smsConsumerGroup.commit).bind(smsConsumerGroup);
+
+const RESUME_INTERVAL = 500;
+let isSmsConsumerGroupPaused = false;
+const resumePausedSmsConsumerGroup = () => {
+	if (isSmsConsumerGroupPaused) {
+		console.log('resuming');
+		smsConsumerGroup.resume();
+		isSmsConsumerGroupPaused = false;
+	}
+};
+
+setInterval(resumePausedSmsConsumerGroup, RESUME_INTERVAL);
 
 const onError = console.log;
 const onSMSMessage = async function(message) {
@@ -30,6 +43,11 @@ const onSMSMessage = async function(message) {
 		console.log(message);
 		if (limitReached) {
 			console.log('limitReached to', limitReached);
+			if (isSmsConsumerGroupPaused) {
+				return;
+			}
+			isSmsConsumerGroupPaused = true;
+			smsConsumerGroup.pause();
 			return;
 		}
 		await sendSMS(data.phoneNumber, data.message);
