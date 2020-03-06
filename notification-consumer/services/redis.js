@@ -8,61 +8,29 @@ client.on('error', function(error) {
 	console.error('redis error', error);
 });
 
-const llenAsync = promisify(client.llen).bind(client);
-const existsAsync = promisify(client.exists).bind(client);
-const rpushxAsync = promisify(client.rpushx).bind(client);
-const setAsync = promisify(client.set).bind(client);
-/*
-Source: https://redis.io/commands/incr
-FUNCTION LIMIT_API_CALL(ip)
-current = LLEN(ip)
-IF current > 10 THEN
-    ERROR "too many requests per second"
-ELSE
-    IF EXISTS(ip) == FALSE
-        MULTI
-            RPUSH(ip,ip)
-            EXPIRE(ip,1)
-        EXEC
-    ELSE
-        RPUSHX(ip,ip)
-    END
-    PERFORM_API_CALL()
-END 
-*/
-const isLimitPerMinuteExceeded = async topic => {
-	const len = await llenAsync(topic);
-	console.log(len);
-	if (len > MAX_SMS_COUNT_PER_MINT) {
-		return true;
-	}
-	const topicExists = await existsAsync(topic);
-	if (!topicExists) {
-		const importMulti = client.multi();
-		importMulti.rpush(topic, topic);
-		importMulti.expire(topic, 60);
+const incrAsync = promisify(client.incr).bind(client);
+const expireAsync = promisify(client.expire).bind(client);
+const getAsync = promisify(client.get).bind(client);
 
-		importMulti.exec((err, results) => {
-			if (err) {
-				throw err;
-			} else {
-				console.log(results);
-			}
-		});
-	} else {
-		await rpushxAsync(topic, topic);
-	}
-	return false;
+const incLimitPerMinuteExceeded = async topic => {
+	const currentMint = Math.floor(new Date().getTime() / (60 * 1000));
+	const count = await incrAsync(`${topic}-${currentMint}`);
+	await expireAsync(topic, 60);
+	return count >= MAX_SMS_COUNT_PER_MINT;
 };
 
-const updateTopicOffset = (topic, offset) => setAsync(`offset-${topic}`, offset);
+const isLimitPerMinuteExceeded = async topic => {
+	const currentMint = Math.floor(new Date().getTime() / (60 * 1000));
+	const count = await getAsync(`${topic}-${currentMint}`);
+	return count >= MAX_SMS_COUNT_PER_MINT;
+};
 
 const shutdown = () => {
 	client.end(true);
 };
 
 module.exports = {
-	updateTopicOffset,
+	incLimitPerMinuteExceeded,
 	isLimitPerMinuteExceeded,
 	shutdown,
 };

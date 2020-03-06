@@ -4,7 +4,7 @@ const util = require('util');
 const uuidv4 = require('uuid').v4;
 
 const { KAFKA_HOST, SMS_NOTIFICATION_TOPIC, PUSH_NOTIFICATION_TOPIC } = require('./configurations');
-const { isLimitPerMinuteExceeded, shutdown } = require('./services/redis');
+const { isLimitPerMinuteExceeded, incLimitPerMinuteExceeded } = require('./services/redis');
 const { sendSMS } = require('./services/sms');
 const { sendPushNotification } = require('./services/push-notification');
 
@@ -24,13 +24,14 @@ const commitSmsConsumerGroup = util.promisify(smsConsumerGroup.commit).bind(smsC
 const RESUME_INTERVAL = 100;
 let isSmsConsumerGroupPaused = false;
 let lastprocessedOffset = 0;
-let lastfetchedOffset = 0;
+let lastfetchedOffset = -1;
 
 const resumePausedSmsConsumerGroup = async () => {
 	if (!isSmsConsumerGroupPaused) {
 		return;
 	}
 	const isLimitReached = await isLimitPerMinuteExceeded(SMS_NOTIFICATION_TOPIC);
+	console.log(isLimitReached);
 	if (!isLimitReached) {
 		console.log('resuming');
 		smsConsumerGroup.resume();
@@ -49,7 +50,7 @@ const onSMSMessage = async function(message) {
 	try {
 		lastfetchedOffset = message.offset;
 		const data = JSON.parse(message.value);
-		const limitReached = await isLimitPerMinuteExceeded(message.topic, true);
+		const limitReached = await isLimitPerMinuteExceeded(message.topic);
 		console.log(message);
 		if (limitReached) {
 			console.log('limitReached to', limitReached);
@@ -61,6 +62,7 @@ const onSMSMessage = async function(message) {
 			return;
 		}
 		await sendSMS(data.phoneNumber, data.message);
+		await incLimitPerMinuteExceeded(message.topic);
 		console.log('offset', message.offset, 'processed');
 		lastprocessedOffset = message.offset;
 	} catch (err) {
@@ -89,5 +91,4 @@ process.once('SIGINT', function() {
 	async.each([pushConsumerGroup, smsConsumerGroup], function(consumer, callback) {
 		consumer.close(true, callback);
 	});
-	shutdown();
 });
